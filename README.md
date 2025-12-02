@@ -1,4 +1,4 @@
-## SMDH
+## TDAPM
 The source code of the **T**arget **D**istribution **A**lignment via **P**rogressive **M**atching (TDAPM) framework.
 
 ## Paper
@@ -10,8 +10,11 @@ Qing Tian, Linmin Wang, Xiang Liu, Junyu Shen, Yuhui Zheng, Jun Wan, Zhen Lei
 We used four benchmark datasets as following:
 
 -Office-31
+
 -Office-Caltech
+
 -Office-Home
+
 -DomainNet
 
 ## Dependencies
