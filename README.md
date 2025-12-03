@@ -20,8 +20,7 @@ We used four benchmark datasets as following:
 ## Dependencies
 **TDAPM** needs the following dependencies:
 
-- python 3.8.5
-- PIL == 9.2.0
-- torch == 1.13.0
-- numpy == 1.23.3
-- torchvision == 0.14.0
+- python 3.8.10
+- torch == 2.1.0+cu118
+- numpy == 1.24.4
+- torchvision == 0.16.0+cu118
