@@ -120,10 +120,14 @@ def train_target(args):
         print(modelpath)
         netC_list[i].load_state_dict(torch.load(modelpath))
         netC_list[i].eval()
+        # for k, v in netC_list[i].named_parameters():
+        #     param_group += [{'params':v, 'lr':args.lr * args.lr_decay3}]
 
     for k, v in netDC_inter.named_parameters():
         param_group += [{'params': v, 'lr': args.lr}]
 
+    # for k, v in netDC_inter_adv.named_parameters():
+    #     param_group += [{'params':v, 'lr':args.lr}]
 
     optimizer = optim.SGD(param_group)
     optimizer = op_copy(optimizer)
@@ -131,6 +135,11 @@ def train_target(args):
     # max_epoch = 15
     max_iter = args.max_epoch * len(dset_loaders["target"])
     interval_iter = max_iter // args.interval
+
+    # --- ADD THIS LINE ---
+    C = interval_iter
+    # ---------------------
+
     iter_num = 0
     acc_init = 0
     iter_num_update = 0
@@ -154,10 +163,13 @@ def train_target(args):
             for i in range(len(args.src)):
                 netF_list[i].eval()
                 netB_list[i].eval()
+                # netC_list[i].eval()
                 if iter_num == 0:
                     temp1, temp2, alpha = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i],
                                                              netC_list[i], args, obtain_prior=True)
                     args.w[i] = alpha
+                    # args.closeness[i] = closeness
+                    # args.entropy[i] = ent
                 else:
                     temp1, temp2 = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i], netC_list[i],
                                                       args, obtain_prior=False)
@@ -171,6 +183,8 @@ def train_target(args):
 
             for i in range(len(args.src)):
                 netF_list[i].train()
+                netB_list[i].train()
+                # netC_list[i].train()
             if iter_num == 0:
                 args.w = args.w / torch.sum(args.w)
                 w = args.w
@@ -241,6 +255,7 @@ def train_target(args):
             all_feature_F = features_all_F_w.float().cpu()
             start_test = False
         else:
+
             all_output = torch.cat((all_output, outputs_all_w.float().cpu()), 0)
             all_feature = torch.cat((all_feature, features_all_w.float().cpu()), 0)
             all_feature_F = torch.cat((all_feature_F, features_all_F_w.float().cpu()), 0)
@@ -289,10 +304,9 @@ def train_target(args):
 
         if args.dc_loss:
             src_domain_labels = src_domain_labels.view(-1)
-            domain_classification_loss = nn.CrossEntropyLoss(weight=args.w.cuda())(domain_preidctions.cuda(),
-                                                                                   src_domain_labels.cuda())
-            total_domain_loss = args.dc_loss_par * domain_classification_loss
-
+            domain_classification_loss = nn.CrossEntropyLoss(weight=args.w.cuda())(domain_preidctions.cuda(),src_domain_labels.cuda())
+            
+            total_domain_loss = args.dc_loss_par * domain_classification_loss  # + 0.4*domain_classification_loss_adv
 
         total_loss = classifier_loss + total_domain_loss
         optimizer.zero_grad()
@@ -337,6 +351,8 @@ def obtain_label_alpha(loader, netF, netB, netC, args, obtain_prior=True):
                 all_output = torch.cat((all_output, outputs.float().cpu()), 0)
                 all_label = torch.cat((all_label, labels.float()), 0)
     if obtain_prior:
+        # alpha 的计算是最近邻居的平均距离与簇的不确定程度之间的比率。
+        # 这个比率可以被视为一种权重或调整因子，用于表示样本与其最近邻居之间的相似度相对于簇的不确定程度的关系
         alpha = utils.obtain_domain_prior(all_fea, all_output, args)
     all_output = nn.Softmax(dim=1)(all_output)
     _, predict = torch.max(all_output, 1)
@@ -362,6 +378,7 @@ def obtain_label_alpha(loader, netF, netB, netC, args, obtain_prior=True):
 
     log_str = 'Accuracy = {:.2f}% -> {:.2f}%'.format(accuracy * 100, acc * 100)
     print(log_str + '\n')
+    # return pred_label.astype('int')
     if obtain_prior:
         return initc, all_fea, alpha
     else:
@@ -381,8 +398,10 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
             outputs_all = torch.zeros(len(args.src), inputs.shape[0], args.class_num)
 
             outputs_all_w = torch.zeros(inputs.shape[0], args.class_num)
+            # 是一个用于存储所有源域模型特征的张量，其维度为 (源域数量,当前批次大小,瓶颈层维度 256)
             features_all = torch.zeros(len(args.src), inputs.shape[0], args.bottleneck)
             features_all_w = torch.zeros(inputs.shape[0], args.bottleneck)
+            # 是一个用于存储所有源域模型提取的特征的张量，其维度为 (源域数量，当前批次大小，netF特征提取器的输出维度)
             features_all_F = torch.zeros(len(args.src), inputs.shape[0], netF_list[0].in_features)
             features_all_F_w = torch.zeros(inputs.shape[0], netF_list[0].in_features)
             weights_all = torch.ones(inputs.shape[0], len(args.src))
@@ -427,6 +446,7 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
                 all_feature_F = torch.cat((all_feature_F, features_all_F_w.float().cpu()), 0)
                 all_label = torch.cat((all_label, labels.float()), 0)
 
+    # all_logis = all_output
     all_output = nn.Softmax(dim=1)(all_output)
     ent = torch.sum(-all_output * torch.log(all_output + args.epsilon), dim=1)
     _, predict = torch.max(all_output, 1)
@@ -564,6 +584,8 @@ def get_nearest_sam_idx(Q, X, is_mem_f, step_num, mtx_ignore,
     epsilon = 1e-10
     Sim = 1 - (Simo / (Nor + epsilon))
 
+    # Sim = cdist(Q, X, "cosine") # too slow
+    # print('eeeeee \n', Sim)
 
     indices_min = np.argmin(Sim, axis=1)
     indices_row = np.arange(0, Q.shape[0], 1)
@@ -574,8 +596,6 @@ def get_nearest_sam_idx(Q, X, is_mem_f, step_num, mtx_ignore,
             indices_min[idx_change] = nearest_idx_last_f[idx_change]
     Sim[indices_row, indices_min] = 1000
 
-
-    # Ignore the history elements.
     if is_mem_f == 1:
         for k in range(step_num):
             indices_ingore = mtx_ignore[:, k]
@@ -605,7 +625,6 @@ def cal_acc_multi(loader, netF_list, netB_list, netC_list, netDC_inter, args):
                 outputs = netC_list[i](features)
 
                 weights_numerator = netDC_inter(features)  # Numerator and denominator
-                # weights_denominator = netG_list(features)
                 weights_test = weights_numerator  # /weights_denominator
                 softmax_weights = nn.Softmax(dim=1)(weights_test)
                 domain_weight = softmax_weights[:, i]
@@ -642,6 +661,7 @@ def cal_acc_multi(loader, netF_list, netB_list, netC_list, netDC_inter, args):
     mean_ent = torch.mean(loss.Entropy(nn.Softmax(dim=1)(all_output))).cpu().data.item()
     return accuracy * 100, mean_ent, z_, t_
 
+
 def print_args(args):
     s = "==========================================\n"
     for arg, content in args.__dict__.items():
@@ -652,7 +672,7 @@ def print_args(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ours')
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
-    parser.add_argument('--t', type=int, default=1,
+    parser.add_argument('--t', type=int, default=0,
                         help="target")  ## Choose which domain to set as target {0 to len(names)-1}
     parser.add_argument('--max_epoch', type=int, default=15, help="max iterations")
     parser.add_argument('--interval', type=int, default=15)
@@ -688,7 +708,7 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--distance', type=str, default='cosine', choices=["euclidean", "cosine"])
-    parser.add_argument('--output', type=str, default='ckps/adapt_ours_TPDS_sensitive')
+    parser.add_argument('--output', type=str, default='ckps/adapt_ours_TPDS')
     parser.add_argument('--output_src', type=str, default='ckps/source/uda')
     args = parser.parse_args()
 
