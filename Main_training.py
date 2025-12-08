@@ -16,10 +16,12 @@ import random
 from scipy.spatial.distance import cdist
 from numpy import linalg as LA
 
+
 def op_copy(optimizer):
     for param_group in optimizer.param_groups:
         param_group['lr0'] = param_group['lr']
     return optimizer
+
 
 def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
     decay = (1 + gamma * iter_num / max_iter) ** (-power)
@@ -30,13 +32,14 @@ def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
         param_group['nesterov'] = True
     return optimizer
 
+
 def image_train(resize_size=256, crop_size=224, alexnet=False):
-  if not alexnet:
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
-  else:
-    normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-  return  transforms.Compose([
+    if not alexnet:
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+    else:
+        normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
+    return transforms.Compose([
         transforms.Resize((resize_size, resize_size)),
         transforms.RandomCrop(crop_size),
         transforms.RandomHorizontalFlip(),
@@ -44,20 +47,22 @@ def image_train(resize_size=256, crop_size=224, alexnet=False):
         normalize
     ])
 
+
 def image_test(resize_size=256, crop_size=224, alexnet=False):
-  if not alexnet:
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
-  else:
-    normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-  return  transforms.Compose([
+    if not alexnet:
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+    else:
+        normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
+    return transforms.Compose([
         transforms.Resize((resize_size, resize_size)),
         transforms.CenterCrop(crop_size),
         transforms.ToTensor(),
         normalize
     ])
 
-def data_load(args): 
+
+def data_load(args):
     ## prepare data
     dsets = {}
     dset_loaders = {}
@@ -66,13 +71,17 @@ def data_load(args):
     txt_test = open(args.test_dset_path).readlines()
 
     dsets["target"] = ImageList_idx(txt_tar, transform=image_train())
-    dset_loaders["target"] = DataLoader(dsets["target"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+    dset_loaders["target"] = DataLoader(dsets["target"], batch_size=train_bs, shuffle=True, num_workers=args.worker,
+                                        drop_last=False)
     dsets['target_'] = ImageList_idx(txt_tar, transform=image_train())
-    dset_loaders['target_'] = DataLoader(dsets['target_'], batch_size=train_bs*3, shuffle=False, num_workers=args.worker, drop_last=False)
+    dset_loaders['target_'] = DataLoader(dsets['target_'], batch_size=train_bs * 3, shuffle=False,
+                                         num_workers=args.worker, drop_last=False)
     dsets["test"] = ImageList_idx(txt_test, transform=image_test())
-    dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs*3, shuffle=False, num_workers=args.worker, drop_last=False)
+    dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs * 3, shuffle=False, num_workers=args.worker,
+                                      drop_last=False)
 
     return dset_loaders
+
 
 def train_target(args):
     dset_loaders = data_load(args)
@@ -80,13 +89,15 @@ def train_target(args):
     if args.net[0:3] == 'res':
         netF_list = [network.ResBase(res_name=args.net).cuda() for i in range(len(args.src))]
     elif args.net[0:3] == 'vgg':
-        netF_list = [network.VGGBase(vgg_name=args.net).cuda() for i in range(len(args.src))]     
+        netF_list = [network.VGGBase(vgg_name=args.net).cuda() for i in range(len(args.src))]
 
-    netB_list = [network.feat_bottleneck(type=args.classifier, feature_dim=netF_list[i].in_features, bottleneck_dim=args.bottleneck).cuda() for i in range(len(args.src))] 
-    netC_list = [network.feat_classifier(type=args.layer, class_num = args.class_num, bottleneck_dim=args.bottleneck).cuda() for i in range(len(args.src))]
-    netDC_inter = network.domain_classifier(domain_num = len(args.src), bottleneck_dim=args.bottleneck).cuda()
-    #netDC_inter_adv = network.domain_classifier_adv(domain_num = len(args.src), bottleneck_dim=args.bottleneck).cuda()
-
+    netB_list = [network.feat_bottleneck(type=args.classifier, feature_dim=netF_list[i].in_features,
+                                         bottleneck_dim=args.bottleneck).cuda() for i in range(len(args.src))]
+    netC_list = [
+        network.feat_classifier(type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck).cuda() for i
+        in range(len(args.src))]
+    netDC_inter = network.domain_classifier(domain_num=len(args.src), bottleneck_dim=args.bottleneck).cuda()
+    # netDC_inter_adv = network.domain_classifier_adv(domain_num = len(args.src), bottleneck_dim=args.bottleneck).cuda()
 
     param_group = []
 
@@ -96,14 +107,14 @@ def train_target(args):
         netF_list[i].load_state_dict(torch.load(modelpath))
         netF_list[i].eval()
         for k, v in netF_list[i].named_parameters():
-            param_group += [{'params':v, 'lr':args.lr * args.lr_decay1}]
+            param_group += [{'params': v, 'lr': args.lr * args.lr_decay1}]
 
         modelpath = args.output_dir_src[i] + '/source_B.pt'
         print(modelpath)
         netB_list[i].load_state_dict(torch.load(modelpath))
         netB_list[i].eval()
         for k, v in netB_list[i].named_parameters():
-            param_group += [{'params':v, 'lr':args.lr * args.lr_decay2}]
+            param_group += [{'params': v, 'lr': args.lr * args.lr_decay2}]
 
         modelpath = args.output_dir_src[i] + '/source_C.pt'
         print(modelpath)
@@ -111,7 +122,8 @@ def train_target(args):
         netC_list[i].eval()
 
     for k, v in netDC_inter.named_parameters():
-        param_group += [{'params':v, 'lr':args.lr}]
+        param_group += [{'params': v, 'lr': args.lr}]
+
 
     optimizer = optim.SGD(param_group)
     optimizer = op_copy(optimizer)
@@ -120,6 +132,7 @@ def train_target(args):
     max_iter = args.max_epoch * len(dset_loaders["target"])
     interval_iter = max_iter // args.interval
     iter_num = 0
+    acc_init = 0
     iter_num_update = 0
 
     args.w = torch.ones(len(args.src))
@@ -134,7 +147,7 @@ def train_target(args):
         if inputs_test.size(0) == 1:
             continue
 
-        if iter_num % interval_iter == 0 and args.cls_par > 0:
+        if iter_num % C == 0 and args.cls_par > 0:
             iter_num_update += 1
             initc = []
             all_feas = []
@@ -142,24 +155,24 @@ def train_target(args):
                 netF_list[i].eval()
                 netB_list[i].eval()
                 if iter_num == 0:
-
-                    temp1, temp2, alpha = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i], netC_list[i], args, obtain_prior=True)
+                    temp1, temp2, alpha = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i],
+                                                             netC_list[i], args, obtain_prior=True)
                     args.w[i] = alpha
-
                 else:
-                    temp1, temp2 = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i], netC_list[i], args, obtain_prior=False)
-                temp1 = torch.from_numpy(temp1).cuda()#center points
-                temp2 = torch.from_numpy(temp2).cuda()#features
-                initc.append(temp1)#
+                    temp1, temp2 = obtain_label_alpha(dset_loaders['target_'], netF_list[i], netB_list[i], netC_list[i],
+                                                      args, obtain_prior=False)
+                temp1 = torch.from_numpy(temp1).cuda()  # center points
+                temp2 = torch.from_numpy(temp2).cuda()  # features
+                initc.append(temp1)  #
                 all_feas.append(temp2)
 
-            _, feas_all, label_confi, _, _ = obtain_label_ts(dset_loaders['test'], netF_list, netB_list,netC_list, netDC_inter, args, iter_num_update)
+            _, feas_all, label_confi, _, _ = obtain_label_ts(dset_loaders['test'], netF_list, netB_list, netC_list,
+                                                             netDC_inter, args, iter_num_update)
 
             for i in range(len(args.src)):
                 netF_list[i].train()
-                netB_list[i].train()
             if iter_num == 0:
-                args.w = args.w/torch.sum(args.w)
+                args.w = args.w / torch.sum(args.w)
                 w = args.w
                 print('Initialized weights:', args.w)
             else:
@@ -178,8 +191,10 @@ def train_target(args):
         outputs_all_w = torch.zeros(inputs_test.shape[0], args.class_num)
         outputs_all_w_N = torch.zeros(inputs_test.shape[0], args.class_num)
 
+        src_domain_labels = torch.zeros(inputs_test.shape[0] * len(args.src), 1)
 
         start_test = True
+        start_each_domain = True
         for i in range(len(args.src)):
             features_F = netF_list[i](inputs_test)
             features_test = netB_list[i](features_F)
@@ -196,18 +211,24 @@ def train_target(args):
             domain_weight = softmax_weights[:, i]
             domain_weight = domain_weight.mean(dim=0)
             outputs_all[i] = outputs_test
-            weights_all[:, i] = domain_weight*args.w[i]
-        
+            weights_all[:, i] = domain_weight * args.w[i]
+            if start_each_domain:
+                domain_preidctions = weights_test
+                src_domain_labels = torch.full((inputs_test.shape[0], 1), int(i))
+                start_each_domain = False
+            else:
+                src_domain_labels = torch.cat((src_domain_labels, torch.full((inputs_test.shape[0], 1), int(i))), 0)
+                domain_preidctions = torch.cat((domain_preidctions, weights_test), 0)
 
         z = torch.sum(weights_all, dim=1)
         z = z + 1e-16
-        weights_all = torch.transpose(torch.transpose(weights_all,0,1)/z,0,1)
+        weights_all = torch.transpose(torch.transpose(weights_all, 0, 1) / z, 0, 1)
         outputs_all = torch.transpose(outputs_all, 0, 1)
         z_ = weights_all[0:1][0]
 
         features_all = torch.transpose(features_all, 0, 1)
         features_all_F = torch.transpose(features_all_F, 0, 1)
-
+        # print(z_)
 
         for i in range(inputs_test.shape[0]):
             outputs_all_w[i] = torch.matmul(torch.transpose(outputs_all[i], 0, 1), weights_all[i])
@@ -218,6 +239,7 @@ def train_target(args):
             all_output = outputs_all_w.float().cpu()
             all_feature = features_all_w.float().cpu()
             all_feature_F = features_all_F_w.float().cpu()
+            start_test = False
         else:
             all_output = torch.cat((all_output, outputs_all_w.float().cpu()), 0)
             all_feature = torch.cat((all_feature, features_all_w.float().cpu()), 0)
@@ -242,7 +264,7 @@ def train_target(args):
         softmax_out_hyper = nn.Softmax(dim=1)(outputs_all_w_N)
         classifier_loss = torch.tensor(0.0).cuda()
         iic_loss = IID_losses.IID_loss(softmax_out, softmax_out_hyper)
-        classifier_loss +=  args.iic_par * iic_loss
+        classifier_loss += args.iic_par * iic_loss
 
         if args.cls_par > 0:
             initc_ = torch.zeros(initc[0].size()).cuda()
@@ -265,7 +287,14 @@ def train_target(args):
         gentropy_loss = gentropy_loss * args.gent_par
         classifier_loss = classifier_loss - gentropy_loss
 
-        total_loss =  classifier_loss
+        if args.dc_loss:
+            src_domain_labels = src_domain_labels.view(-1)
+            domain_classification_loss = nn.CrossEntropyLoss(weight=args.w.cuda())(domain_preidctions.cuda(),
+                                                                                   src_domain_labels.cuda())
+            total_domain_loss = args.dc_loss_par * domain_classification_loss
+
+
+        total_loss = classifier_loss + total_domain_loss
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
@@ -280,7 +309,7 @@ def train_target(args):
                 netDC_inter.eval()
             acc, _, z_, t_ = cal_acc_multi(dset_loaders['test'], netF_list, netB_list, netC_list, netDC_inter, args)
             log_str = 'Iter:{}/{}; Classification Accuracy = {:.2f}%'.format(iter_num, max_iter, acc)
-            print(log_str+'\n')
+            print(log_str + '\n')
 
             args.out_file.write(log_str + '\n')
             args.out_file.flush()
@@ -317,7 +346,7 @@ def obtain_label_alpha(loader, netF, netB, netC, args, obtain_prior=True):
     K = all_output.size(1)
     aff = all_output.float().cpu().numpy()
     initc = aff.transpose().dot(all_fea)
-    initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
+    initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
 
     dd = cdist(all_fea, initc, 'cosine')
     pred_label = dd.argmin(axis=1)
@@ -326,17 +355,18 @@ def obtain_label_alpha(loader, netF, netB, netC, args, obtain_prior=True):
     for round in range(1):
         aff = np.eye(K)[pred_label]
         initc = aff.transpose().dot(all_fea)
-        initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
+        initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
         dd = cdist(all_fea, initc, 'cosine')
         pred_label = dd.argmin(axis=1)
         acc = np.sum(pred_label == all_label.float().numpy()) / len(all_fea)
 
-    log_str = 'Accuracy = {:.2f}% -> {:.2f}%'.format(accuracy*100, acc*100)
-    print(log_str+'\n')
+    log_str = 'Accuracy = {:.2f}% -> {:.2f}%'.format(accuracy * 100, acc * 100)
+    print(log_str + '\n')
     if obtain_prior:
         return initc, all_fea, alpha
     else:
         return initc, all_fea
+
 
 def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, iter_num_update_f):
     start_test = True
@@ -373,14 +403,12 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
                 outputs_all[i] = outputs
                 weights_all[:, i] = domain_weight * args.w[i]
 
-
             z = torch.sum(weights_all, dim=1)
             z = z + 1e-16
             weights_all = torch.transpose(torch.transpose(weights_all, 0, 1) / z, 0, 1)
             outputs_all = torch.transpose(outputs_all, 0, 1)
             features_all = torch.transpose(features_all, 0, 1)
             features_all_F = torch.transpose(features_all_F, 0, 1)
-
 
             for i in range(inputs.shape[0]):
                 outputs_all_w[i] = torch.matmul(torch.transpose(outputs_all[i], 0, 1), weights_all[i])
@@ -403,7 +431,7 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
     ent = torch.sum(-all_output * torch.log(all_output + args.epsilon), dim=1)
     _, predict = torch.max(all_output, 1)
 
-    len_unconfi = int(ent.shape[0]*0.5)
+    len_unconfi = int(ent.shape[0] * 0.5)
     idx_unconfi = ent.topk(len_unconfi, largest=True)[-1]
     idx_unconfi_list_ent = idx_unconfi.cpu().numpy().tolist()
 
@@ -416,30 +444,33 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
     K = all_output.size(1)
     aff = all_output.float().cpu().numpy()
     initc = aff.transpose().dot(all_feature)
-    initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
+    initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
 
     cls_count = np.eye(K)[predict].sum(axis=0)
-    labelset = np.where(cls_count>args.threshold)
+    labelset = np.where(cls_count > args.threshold)
     labelset = labelset[0]
+    # print(labelset)
 
     dd = cdist(all_feature, initc[labelset], args.distance)
     pred_label = dd.argmin(axis=1)
     pred_label = labelset[pred_label]
 
     # --------------------use dd to get confi_idx and unconfi_idx-------------
-    dd_min = dd.min(axis = 1)
+    dd_min = dd.min(axis=1)
     dd_min_tsr = torch.from_numpy(dd_min).detach()
-    dd_t_confi = dd_min_tsr.topk(int((dd.shape[0]*0.6)), largest = False)[-1]
+    dd_t_confi = dd_min_tsr.topk(int((dd.shape[0] * 0.6)), largest=False)[-1]
     dd_confi_list = dd_t_confi.cpu().numpy().tolist()
     dd_confi_list.sort()
     idx_confi = dd_confi_list
 
-    idx_all_arr = np.zeros(shape = dd.shape[0], dtype = np.int64)
+    idx_all_arr = np.zeros(shape=dd.shape[0], dtype=np.int64)
     idx_all_arr[idx_confi] = 1
     idx_unconfi_arr = np.where(idx_all_arr == 0)
     idx_unconfi_list_dd = list(idx_unconfi_arr[0])
 
     idx_unconfi_list = list(set(idx_unconfi_list_dd).intersection(set(idx_unconfi_list_ent)))
+    # ------------------------------------------------------------------------
+    # idx_unconfi_list = idx_unconfi_list_dd # idx_unconfi_list_dd
 
     label_confi = np.ones(ent.shape[0], dtype="int64")
     label_confi[idx_unconfi_list] = 0
@@ -449,7 +480,7 @@ def obtain_label_ts(loader, netF_list, netB_list, netC_list, netDC_inter, args, 
 
     args.out_file.write(log_str + '\n')
     args.out_file.flush()
-    print(log_str+'\n')
+    print(log_str + '\n')
 
     return pred_label.astype('int'), all_feature_F, label_confi, all_label, all_output
 
@@ -531,7 +562,7 @@ def get_nearest_sam_idx(Q, X, is_mem_f, step_num, mtx_ignore,
     nx = np.expand_dims(LA.norm(X, axis=1), axis=0)
     Nor = np.dot(nq, nx)
     epsilon = 1e-10
-    Sim = 1 - (Simo / (Nor + epsilon ))
+    Sim = 1 - (Simo / (Nor + epsilon))
 
 
     indices_min = np.argmin(Sim, axis=1)
@@ -543,6 +574,8 @@ def get_nearest_sam_idx(Q, X, is_mem_f, step_num, mtx_ignore,
             indices_min[idx_change] = nearest_idx_last_f[idx_change]
     Sim[indices_row, indices_min] = 1000
 
+
+    # Ignore the history elements.
     if is_mem_f == 1:
         for k in range(step_num):
             indices_ingore = mtx_ignore[:, k]
@@ -551,6 +584,7 @@ def get_nearest_sam_idx(Q, X, is_mem_f, step_num, mtx_ignore,
     indices_min_cur = np.argmin(Sim, axis=1)
     indices_self = indices_min
     return indices_min_cur, indices_self
+
 
 def cal_acc_multi(loader, netF_list, netB_list, netC_list, netDC_inter, args):
     start_test = True
@@ -570,27 +604,29 @@ def cal_acc_multi(loader, netF_list, netB_list, netC_list, netDC_inter, args):
                 features = netB_list[i](netF_list[i](inputs))
                 outputs = netC_list[i](features)
 
-                weights_numerator = netDC_inter(features)#Numerator and denominator
-                weights_test = weights_numerator#/weights_denominator
+                weights_numerator = netDC_inter(features)  # Numerator and denominator
+                # weights_denominator = netG_list(features)
+                weights_test = weights_numerator  # /weights_denominator
                 softmax_weights = nn.Softmax(dim=1)(weights_test)
                 domain_weight = softmax_weights[:, i]
                 domain_weight = domain_weight.mean(dim=0)
-                weights_all[:, i] = domain_weight*args.w[i]
+                weights_all[:, i] = domain_weight * args.w[i]
                 transferability[:, i] = domain_weight
                 outputs_all[i] = outputs
-                #weights_all[:, i] = domain_weight.squeeze()
+                # weights_all[:, i] = domain_weight.squeeze()
 
             z = torch.sum(weights_all, dim=1)
             z = z + 1e-16
-
-            weights_all = torch.transpose(torch.transpose(weights_all,0,1)/z,0,1)
+            # print(weights_all[0:1][0])
+            weights_all = torch.transpose(torch.transpose(weights_all, 0, 1) / z, 0, 1)
+            # print(outputs_all.size())
             outputs_all = torch.transpose(outputs_all, 0, 1)
-
+            # print(outputs_all.size())
             t_ = transferability[0:1][0]
             z_ = weights_all[0:1][0]
-
+            # print(z_)
             for i in range(inputs.shape[0]):
-                outputs_all_w[i] = torch.matmul(torch.transpose(outputs_all[i],0,1), weights_all[i])
+                outputs_all_w[i] = torch.matmul(torch.transpose(outputs_all[i], 0, 1), weights_all[i])
 
             if start_test:
                 all_output = outputs_all_w.float().cpu()
@@ -604,7 +640,8 @@ def cal_acc_multi(loader, netF_list, netB_list, netC_list, netDC_inter, args):
 
     accuracy = torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0])
     mean_ent = torch.mean(loss.Entropy(nn.Softmax(dim=1)(all_output))).cpu().data.item()
-    return accuracy*100, mean_ent, z_, t_
+    return accuracy * 100, mean_ent, z_, t_
+
 def print_args(args):
     s = "==========================================\n"
     for arg, content in args.__dict__.items():
@@ -615,16 +652,16 @@ def print_args(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ours')
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
-    parser.add_argument('--t', type=int, default=1, help="target")
+    parser.add_argument('--t', type=int, default=1,
+                        help="target")  ## Choose which domain to set as target {0 to len(names)-1}
     parser.add_argument('--max_epoch', type=int, default=15, help="max iterations")
     parser.add_argument('--interval', type=int, default=15)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=4, help="number of workers")
     parser.add_argument('--dset', type=str, default='office-home',
-                        choices=['office-31', 'office-home', 'office-caltech'])
+                        choices=['office-31', 'office-home', 'office-caltech', 'DomainNet'])
     parser.add_argument('--lr', type=float, default=1 * 1e-2, help="learning rate")
-    parser.add_argument('--net', type=str, default='resnet50',
-                        help="vgg16, resnet50, res101")
+    parser.add_argument('--net', type=str, default='resnet50', help="vgg16, resnet50, res101")
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
     parser.add_argument('--pre_step', type=int, default=50, help="pretrain step of domain classifier")
 
@@ -634,15 +671,15 @@ if __name__ == "__main__":
     parser.add_argument('--threshold', type=int, default=0)
 
     parser.add_argument('--iic_par', type=float, default=1.0)
-    parser.add_argument('--cls_par', type=float, default=0.1)
-    parser.add_argument('--gent_par', type=float, default=0.9)
+    parser.add_argument('--cls_par', type=float, default=0.2)
+    parser.add_argument('--gent_par', type=float, default=0.2)
+    parser.add_argument('--dc_loss_par', type=float, default=0.1)
 
-    parser.add_argument('--dc_loss_par', type=float, default=0.5)
     parser.add_argument('--ent_par', type=float, default=0.5)
     parser.add_argument('--lr_decay1', type=float, default=0.1)
     parser.add_argument('--lr_decay2', type=float, default=1.0)
     parser.add_argument('--lr_decay3', type=float, default=0.1)
-
+    # 所选数据的比例
     parser.add_argument('--ratio', type=float, default=0.5, help="the ratio of selected data")
     parser.add_argument('--K', type=int, default=20, help="the number of selected neighbors")
 
@@ -651,8 +688,8 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--distance', type=str, default='cosine', choices=["euclidean", "cosine"])
-    parser.add_argument('--output', type=str, default='ckps/our_TDAPM')
-    parser.add_argument('--output_src', type=str, default='ckps/source_Model')
+    parser.add_argument('--output', type=str, default='ckps/adapt_ours_TPDS_sensitive')
+    parser.add_argument('--output_src', type=str, default='ckps/source/uda')
     args = parser.parse_args()
 
     if args.dset == 'office-home':
@@ -667,7 +704,6 @@ if __name__ == "__main__":
     if args.dset == 'DomainNet':
         names = ['clipart', 'infograph', 'painting', 'quickdraw', 'real', 'sketch']
         args.class_num = 345
-
     args.src = []
     for i in range(len(names)):
         if i == args.t:
@@ -686,25 +722,25 @@ if __name__ == "__main__":
         if i != args.t:
             continue
         folder = './data/'
-        # 使用 os.path.join 增强跨平台路径兼容性
-        args.t_dset_path = osp.join(folder, args.dset, names[args.t] + '_list.txt')
-        args.test_dset_path = osp.join(folder, args.dset, names[args.t] + '_list.txt')
+        args.t_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
+        args.test_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
         print(args.t_dset_path)
 
     args.output_dir_src = []
     for i in range(len(args.src)):
         args.output_dir_src.append(osp.join(args.output_src, args.dset, args.src[i][0].upper()))
     print(args.output_dir_src)
-
     args.output_dir = osp.join(args.output, args.dset, names[args.t][0].upper())
 
     if not osp.exists(args.output_dir):
-        os.makedirs(args.output_dir, exist_ok=True)
+        os.system('mkdir -p ' + args.output_dir)
+    if not osp.exists(args.output_dir):
+        os.mkdir(args.output_dir)
 
     ctime = time.localtime()
     year, month, day, hour, miniute = ctime.tm_year, ctime.tm_mon, ctime.tm_mday, ctime.tm_hour, ctime.tm_min
-    args.savename = 'cls_' + str(args.cls_par) + '_gent_' + str(args.gent_par) + '_' + str(year) + '-' + str(
-        month) + '-' + str(day) + '-' + str(hour) + '-' + str(miniute)
+    args.savename = 'cls_' + str(args.cls_par) + '_gent_' + str(args.gent_par) + '_dcloss_' + str(
+        args.dc_loss_par) + '_' + str(year) + '-' + str(month) + '-' + str(day) + '-' + str(hour) + '-' + str(miniute)
 
     args.out_file = open(osp.join(args.output_dir, 'log_' + args.savename + '.txt'), 'w')
     args.out_file.write(print_args(args) + '\n')
